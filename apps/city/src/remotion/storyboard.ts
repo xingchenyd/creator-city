@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CreatorProject, ProfileMediaAsset, UserProfile } from "../features/profile";
-import { buildLocalMediaNarrative, parseNarrativeFacts, parseNarrativeTimestamps, shouldRegenerateNarrative } from "../features/mediaNarrative";
+import { buildLocalMediaNarrative, findResumeProjectExcerpt, isNarrativePlaceholder, parseNarrativeFacts, parseNarrativeTimestamps, shouldRegenerateNarrative } from "../features/mediaNarrative";
 
 const baseSceneSchema = z.object({
   id: z.string(),
@@ -119,7 +119,6 @@ export type ProjectScene = z.infer<typeof projectSceneSchema>;
 export const getStoryboardDuration = (storyboard: CreatorStoryboard) =>
   storyboard.scenes.reduce((total, scene) => total + scene.durationInFrames, 0);
 
-const TARGET_DURATION_SECONDS = 36;
 const MAX_SHOWCASE_SCENES = 2;
 
 const hasVideoMedia = (project: CreatorProject) => Boolean(project.mediaUrl && project.mediaType === "video");
@@ -132,7 +131,6 @@ function resolvePresentation(project: CreatorProject): ProjectScene["presentatio
   if (project.workflow.length >= 2) return "workflow";
   return "browser";
 }
-
 const themePalettes = [
   { accent: "#f25f52", secondary: "#78d7c2" },
   { accent: "#f1c75b", secondary: "#69b8de" },
@@ -169,21 +167,32 @@ function buildProjectStoryBeats(
 ): ProjectScene["storyBeats"] {
   type StoryBeat = ProjectScene["storyBeats"][number];
   const clean = (value: string | undefined) => (value || "").replace(/\s+/g, " ").trim();
+  const meaningful = (value: string | undefined) => isNarrativePlaceholder(value) ? "" : clean(value);
   const shorten = (value: string, length = 104) => value.length > length ? `${value.slice(0, length - 1)}…` : value;
   const comments = mediaClips.map((clip) => clip.comment).filter(Boolean);
   const commentFacts = comments.map(parseNarrativeFacts);
-  const firstFact = (key: keyof ReturnType<typeof parseNarrativeFacts>) => clean(commentFacts.find((facts) => clean(facts[key]))?.[key]);
+  const resumeExcerpt = findResumeProjectExcerpt(profile.resume, project.name, project.url);
+  const resumeFacts = parseNarrativeFacts(resumeExcerpt);
+  const firstFact = (key: keyof ReturnType<typeof parseNarrativeFacts>) => meaningful(commentFacts.find((facts) => meaningful(facts[key]))?.[key]);
+  const narrativeBeats = mediaClips.flatMap((clip, mediaIndex) => clip.narrativeBeats.map((item) => ({ ...item, mediaIndex })));
+  const narrativeFor = (phase: StoryBeat["phase"]) => narrativeBeats.find((item) => item.phase === phase && meaningful(item.body));
   const subject = clean(project.name) || "这个项目";
-  const problem = firstFact("problem") || clean(project.desc);
-  const role = firstFact("role") || clean(project.role);
-  const actionParts = [firstFact("action"), ...project.workflow, ...project.highlights]
+  const hookNarrative = narrativeFor("hook");
+  const contextNarrative = narrativeFor("context");
+  const actionNarrative = narrativeFor("action");
+  const evidenceNarrative = narrativeFor("evidence");
+  const resultNarrative = narrativeFor("result");
+  const reflectionNarrative = narrativeFor("reflection");
+  const problem = meaningful(contextNarrative?.body) || firstFact("problem") || meaningful(resumeFacts.problem) || meaningful(project.desc);
+  const role = firstFact("role") || meaningful(resumeFacts.role) || meaningful(project.role);
+  const actionParts = [meaningful(actionNarrative?.body), firstFact("action"), meaningful(resumeFacts.action), ...project.workflow, ...project.highlights]
     .map(clean)
-    .filter((value, index, values) => value && values.indexOf(value) === index)
+    .filter((value, index, values) => meaningful(value) && values.indexOf(value) === index)
     .slice(0, 3);
   const action = actionParts.join(" → ");
-  const result = firstFact("result") || clean(project.impact);
-  const reflection = firstFact("reflection");
-  const explicitEvidence = firstFact("evidence");
+  const result = meaningful(resultNarrative?.body) || firstFact("result") || meaningful(resumeFacts.result) || meaningful(project.impact);
+  const reflection = meaningful(reflectionNarrative?.body) || firstFact("reflection") || meaningful(resumeFacts.reflection);
+  const explicitEvidence = meaningful(evidenceNarrative?.body) || firstFact("evidence") || meaningful(resumeFacts.evidence);
   const keywords = (...values: Array<string | string[] | undefined>) => [...new Set(values.flatMap((value) => Array.isArray(value) ? value : [value])
     .flatMap((value) => clean(value).split(/[，。；、|/：:·×→]/))
     .map(clean)
@@ -197,10 +206,10 @@ function buildProjectStoryBeats(
       .map((moment) => ({ mediaIndex, start: moment.seconds, label: moment.label }));
     if (explicit.length) return explicit;
     const duration = clip.durationInSeconds;
-    const ratios = [0.08, 0.38, 0.7];
+    const ratios = [0.06, 0.4, 0.72];
     return ratios.map((ratio, index) => ({
       mediaIndex,
-      start: duration > 0 ? Math.max(0, Math.min(duration - 2.8, duration * ratio)) : index * 2.8,
+      start: duration > 0 ? Math.max(0, Math.min(duration - 3.6, duration * ratio)) : index * 3.6,
       label: "",
     }));
   });
@@ -217,48 +226,77 @@ function buildProjectStoryBeats(
       layout: full && videoIndices.length ? "media-full" : "split",
       mediaIndex,
       trimStartInSeconds: Math.max(0, start),
-      trimDurationInSeconds: duration > 0 ? Math.max(1.8, Math.min(3.4, duration - start)) : 3,
+      trimDurationInSeconds: duration > 0 ? Math.max(2.8, Math.min(4.2, duration - start)) : 3.6,
     };
   };
-  const beat = (phase: StoryBeat["phase"], title: string, body: string, visual: StoryBeat["visual"], cue: string, beatKeywords: string[]): StoryBeat => ({
+  const beat = (phase: StoryBeat["phase"], title: string, body: string, visual: StoryBeat["visual"], cue: string, beatKeywords: string[], source?: typeof narrativeBeats[number]): StoryBeat => ({
     phase,
-    title: shorten(title, 36),
-    body: shorten(body || "尚未提供对应事实，请在素材评论或项目资料中补充。"),
-    visualCue: cue,
-    layout: "fullscreen",
-    visual,
-    keywords: beatKeywords.length ? beatKeywords : [subject],
+    title: shorten(meaningful(source?.title) || title, 36),
+    body: shorten(meaningful(source?.body) || body),
+    visualCue: meaningful(source?.visualCue) || cue,
+    layout: source?.layout || "fullscreen",
+    visual: source?.visual || visual,
+    keywords: [...new Set([...(source?.keywords || []), ...beatKeywords])].slice(0, 5).length
+      ? [...new Set([...(source?.keywords || []), ...beatKeywords])].slice(0, 5)
+      : [subject],
   });
 
-  const hookBody = result
-    ? `${profile.name || "创作者"}用 ${subject} 回答了一个具体问题：${problem || "项目资料中的核心命题"}。最后，以“${result}”作为可核验落点。`
-    : `${profile.name || "创作者"}将从真实上传素材出发，说明 ${subject} 要解决什么、本人负责什么，以及画面能够证明什么。`;
-  const contextBody = problem || "尚未提供明确的问题、目标用户或约束条件。";
-  const actionBody = [role ? `我的职责是${role}` : "职责边界尚未提供", action ? `关键推进顺序是：${action}` : "具体行动尚未提供"].join("；");
+  const hookBody = meaningful(hookNarrative?.body) || (result
+    ? `${profile.name || "创作者"}通过 ${subject} 形成了明确成果：${result}。下面从真实项目画面回到过程。`
+    : problem
+      ? `${profile.name || "创作者"}用真实素材介绍 ${subject}，并从项目背景、个人职责到实机画面依次展开。`
+      : `${profile.name || "创作者"}用真实项目画面介绍 ${subject}。`);
+  const actionBody = [role ? `职责：${role}` : "", action ? `推进：${action}` : ""].filter(Boolean).join("；");
   const evidenceMoment = momentFor(2);
-  const evidenceLabel = evidenceMoment?.label || explicitEvidence;
+  const evidenceLabel = meaningful(evidenceMoment?.label) || explicitEvidence;
   const evidenceBody = evidenceLabel
-    ? `这段真实画面重点展示：${evidenceLabel}。它用于支撑前面的行动说明，而不是作为装饰素材。`
-    : "这里直接播放上传素材中的代表片段，用真实界面、操作过程或路演画面支撑项目说明。";
-  const outcomeBody = [result ? `可核验结果：${result}` : "结果或影响尚未提供", reflection ? `方法复盘：${reflection}` : ""].filter(Boolean).join("；");
+    ? `这段画面重点展示：${evidenceLabel}。`
+    : `${subject} 的真实录屏保留了界面状态、操作过程与反馈。`;
 
-  const beats: StoryBeat[] = [
-    beat("hook", `${profile.name || "创作者"} · ${subject}`, hookBody, "kinetic", "先建立人物、项目与核心问题之间的关系。", keywords(profile.name, subject, result)),
-    withMedia(beat("context", `先说明为什么做 ${subject}`, contextBody, "network", "左侧交代问题，右侧在两秒内进入第一段真实视频。", keywords(problem, subject)), 0),
-    withMedia(beat("action", role ? `我负责：${role}` : "职责与关键行动", actionBody, "workflow", "动作按用户填写的职责、流程和亮点依次推进。", keywords(role, actionParts, project.tech)), 1),
-    withMedia(beat("evidence", evidenceMoment ? `重点片段 · ${Math.floor(evidenceMoment.start / 60).toString().padStart(2, "0")}:${Math.floor(evidenceMoment.start % 60).toString().padStart(2, "0")}` : "真实画面证据", evidenceBody, "media-focus", "重点片段短暂全屏，让观众看清真实产品或路演证据。", keywords(evidenceLabel, explicitEvidence, subject)), 2, true),
-    withMedia(beat(result ? "result" : "reflection", result ? `${subject} 的结果与复盘` : `${subject} 留下的方法`, outcomeBody, result && /\d|%|倍|项|人|次/.test(result) ? "metric" : "compare", "将结果、方法与人物能力收束为同一结论。", keywords(result, reflection, project.highlights)), 3),
-  ];
+  const beats: StoryBeat[] = [beat("hook", `${profile.name || "创作者"} · ${subject}`, hookBody, "kinetic", "建立人物、作品与主题之间的关系。", keywords(profile.name, subject, result), hookNarrative)];
+  if (problem) beats.push(withMedia(beat("context", `为什么做 ${subject}`, problem, "network", "左侧交代问题，右侧进入第一段真实素材。", keywords(problem, subject), contextNarrative), 0));
+  if (actionBody) beats.push(withMedia(beat("action", role ? `我负责：${role}` : "关键实现路径", actionBody, "workflow", "按已提供的职责与动作组织实现路径。", keywords(role, actionParts, project.tech), actionNarrative), 1));
+
+  const evidenceBeat = withMedia(beat(
+    "evidence",
+    evidenceMoment ? `重点片段 · ${Math.floor(evidenceMoment.start / 60).toString().padStart(2, "0")}:${Math.floor(evidenceMoment.start % 60).toString().padStart(2, "0")}` : "真实画面证据",
+    evidenceBody,
+    "media-focus",
+    "让真实产品、实机操作或路演片段成为叙事证据。",
+    keywords(evidenceLabel, explicitEvidence, subject),
+    evidenceNarrative,
+  ), 2, true);
+  beats.push(evidenceBeat);
+
+  if (mediaIndices.length) {
+    const supportingEvidence = [
+      { title: `${subject} · 项目全貌`, body: `继续通过真实素材观察 ${subject} 的界面、流程与当前完成状态。` },
+      { title: `${subject} · 操作细节`, body: "保留连续操作片段，让交互过程与画面反馈自然完成说明。" },
+    ];
+    let mediaBeatCount = beats.filter((item) => item.layout !== "fullscreen").length;
+    let supportIndex = 0;
+    while (mediaBeatCount < 3 && supportIndex < supportingEvidence.length) {
+      const support = supportingEvidence[supportIndex];
+      beats.push(withMedia(beat("evidence", support.title, support.body, "media-focus", "用更长的真实片段补足文字较少时的画面信息。", keywords(subject, project.tech)), 3 + supportIndex, supportIndex === 1));
+      mediaBeatCount += 1;
+      supportIndex += 1;
+    }
+  }
+
+  if (result) beats.push(withMedia(beat("result", `${subject} 的结果`, result, /\d|%|倍|项|人|次/.test(result) ? "metric" : "compare", "用已提供的结果收束项目。", keywords(result, project.highlights), resultNarrative), 4));
+  if (reflection) beats.push(beat("reflection", `${subject} 留下的方法`, reflection, "kinetic", "把明确复盘转化为下一段经历的过渡。", keywords(reflection, subject), reflectionNarrative));
   return beats;
 }
 
 function fitStoryboardDuration(scenes: CreatorScene[], fps: number): CreatorScene[] {
-  const targetFrames = TARGET_DURATION_SECONDS * fps;
+  const projectScenes = scenes.filter((scene) => scene.type === "project");
+  const targetSeconds = projectScenes.length >= 2 ? 36 : projectScenes.length === 1 ? 32 : 30;
+  const targetFrames = targetSeconds * fps;
   const currentFrames = scenes.reduce((total, scene) => total + scene.durationInFrames, 0);
   const scale = targetFrames / Math.max(1, currentFrames);
   const paced = scenes.map((scene) => ({
     ...scene,
-    durationInFrames: Math.max(3 * fps, Math.round(scene.durationInFrames * scale)),
+    durationInFrames: Math.max((scene.type === "project" ? 7 : 2.4) * fps, Math.round(scene.durationInFrames * scale)),
   }));
   const roundedFrames = paced.reduce((total, scene) => total + scene.durationInFrames, 0);
   const last = paced[paced.length - 1];
@@ -372,18 +410,18 @@ export function buildCreatorStoryboard(profile: UserProfile): CreatorStoryboard 
     scenes.push({
       id: `project-${project.id || index}`,
       type: "project",
-      durationInFrames: 12 * fps,
+      durationInFrames: Math.round(Math.max(10, Math.min(16, storyBeats.length * 3.05)) * fps),
       eyebrow: `0${scenes.length} / PROJECT`,
       title: project.name || `Project ${index + 1}`,
-      subtitle: project.desc || "项目说明待补充",
+      subtitle: project.desc || storyBeats[0]?.body || project.name,
       sourceLabel: project.ownership === "reference"
         ? `${project.sourceOwner || "外部作者"} 产品 / 架构参考（非本人项目）`
         : mediaClips.length ? `${mediaClips.length} 份叙事素材` : presentation === "live" ? "实机视频" : presentation === "architecture" ? "架构说明" : presentation === "workflow" ? "流程说明" : "本人 GitHub 项目",
       projectId: project.id,
       projectName: project.name,
       projectUrl: project.url || "",
-      role: project.role || "职责待补充",
-      impact: project.impact || "结果待补充",
+      role: project.role || "",
+      impact: project.impact || "",
       tech: project.tech.slice(0, 5),
       highlights: project.highlights.slice(0, 4),
       presentation,
@@ -425,7 +463,7 @@ export function buildCreatorStoryboard(profile: UserProfile): CreatorStoryboard 
     scenes.push({
       id: `experience-media-${asset.id || index}`,
       type: "project",
-      durationInFrames: 12 * fps,
+      durationInFrames: Math.round(Math.max(10, Math.min(16, storyBeats.length * 3.05)) * fps),
       eyebrow: `0${scenes.length} / EXPERIENCE FILM`,
       title: experience.organization || experience.role || "实践经历",
       subtitle: experience.summary || asset.comment || "一段由真实素材支撑的经历",
@@ -433,8 +471,8 @@ export function buildCreatorStoryboard(profile: UserProfile): CreatorStoryboard 
       projectId: `experience-${experience.id}`,
       projectName: experience.organization || experience.role,
       projectUrl: "",
-      role: experience.role || "职责待补充",
-      impact: experience.highlights[0] || asset.comment || "结果待补充",
+      role: experience.role || "",
+      impact: experience.highlights[0] || asset.comment || "",
       tech: skills.slice(0, 4).map((skill) => skill.name).filter(Boolean),
       highlights: experience.highlights.slice(0, 4),
       presentation: mediaType === "video" ? "live" : "browser",
@@ -475,7 +513,7 @@ export function buildCreatorStoryboard(profile: UserProfile): CreatorStoryboard 
       title: "技能背后有作品",
       subtitle: "能力不仅是一条进度条，也对应具体证据。",
       sourceLabel: "技能",
-      skills: skills.slice(0, 6).map((skill) => ({ name: skill.name || "技能待补充", level: skill.level, evidence: skill.evidence || "证据待补充" })),
+      skills: skills.slice(0, 6).map((skill) => ({ name: skill.name, level: skill.level, evidence: skill.evidence || "" })),
     });
   }
 

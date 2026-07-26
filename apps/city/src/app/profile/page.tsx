@@ -7,8 +7,9 @@ import { Player } from "@remotion/player";
 import { ArrowUpRight, Award, Building2, CalendarDays, Clapperboard, Code2, FileText, GitFork, Map, PencilLine, Sparkles } from "lucide-react";
 import { CreatorIntro, type CreatorIntroProps } from "@/remotion/CreatorIntro";
 import { buildCreatorStoryboard, getStoryboardDuration } from "@/remotion/storyboard";
-import { loadCloudProfile, loadProfile, type UserProfile } from "@/features/profile";
+import { loadCloudProfile, loadProfile, saveProfile, type UserProfile } from "@/features/profile";
 import { resolveProfileMedia } from "@/features/mediaLibrary";
+import { repairProfileMediaBindings } from "@/features/profileMediaBindings";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -18,12 +19,14 @@ export default function ProfilePage() {
     let revoke: (() => void) | undefined;
     let active = true;
     void loadCloudProfile().then((currentProfile) => {
-      const fallbackProfile = currentProfile || loadProfile();
-      if (!fallbackProfile) {
+      const storedProfile = currentProfile || loadProfile();
+      if (!storedProfile) {
         router.replace("/onboarding");
         return null;
       }
-      return resolveProfileMedia(fallbackProfile);
+      const repairedProfile = repairProfileMediaBindings(storedProfile);
+      saveProfile(repairedProfile);
+      return resolveProfileMedia(repairedProfile);
     }).then((resolved) => {
       if (!resolved) return;
       if (!active) { resolved.revoke(); return; }

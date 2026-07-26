@@ -32,7 +32,15 @@ const legacyNarrativePatterns = [
   /核心构建，是我推进的主线/,
   /完整交付链路/,
   /从想法变成了可以演示、验证和继续迭代的作品/,
+  /待补充/,
+  /尚未提供/,
+  /请补充/,
+  /仍需补充/,
+  /no description/i,
 ];
+
+export const isNarrativePlaceholder = (value: string | undefined) => !value?.trim()
+  || legacyNarrativePatterns.some((pattern) => pattern.test(value));
 
 export const shouldRegenerateNarrative = (beats: MediaNarrativeBeat[]) => {
   if (beats.length < 4) return true;
@@ -96,14 +104,16 @@ const trimFact = (value: string) => value
 
 const assignFact = (facts: NarrativeFacts, label: string, value: string) => {
   const match = factLabels.find((item) => item.pattern.test(label.trim()));
-  const normalized = trimFact(value);
+  const normalized = trimFact(match?.key === "role"
+    ? value.split(/\s+(?=围绕|将|通过|完成|搭建|构建|负责)/)[0]
+    : value);
   if (match && normalized && !facts[match.key]) facts[match.key] = normalized;
 };
 
 export const parseNarrativeFacts = (comment: string): NarrativeFacts => {
   const facts: NarrativeFacts = {};
   const clauses = comment
-    .split(/\r?\n|[。！？；;]/)
+    .split(/\r?\n|[。！？；;|｜]/)
     .map((item) => item.trim())
     .filter(Boolean);
 
@@ -111,19 +121,42 @@ export const parseNarrativeFacts = (comment: string): NarrativeFacts => {
     const labeled = clause.match(/^([^：:]{1,12})[：:]\s*(.+)$/);
     if (labeled) {
       assignFact(facts, labeled[1], labeled[2]);
+      const definition = factLabels.find((item) => item.pattern.test(labeled[1].trim()));
+      if (definition?.key === "role") {
+        const boundary = labeled[2].search(/\s+(?=围绕|将|通过|完成|搭建|构建|负责)/);
+        if (boundary >= 0) {
+          const trailingFacts = parseNarrativeFacts(labeled[2].slice(boundary).trim());
+          for (const [key, value] of Object.entries(trailingFacts) as Array<[keyof NarrativeFacts, string]>) {
+            if (!facts[key] && value) facts[key] = value;
+          }
+        }
+      }
       continue;
     }
 
+    const aroundSubject = clause.match(/围绕[“"]([^”"]+)[”"]/);
+    if (aroundSubject?.[1] && !facts.problem) facts.problem = trimFact(aroundSubject[1]);
+
     const inlineRules: Array<{ key: keyof NarrativeFacts; pattern: RegExp }> = [
       { key: "evidence", pattern: /(重点看|画面显示|镜头展示|演示了)/ },
-      { key: "result", pattern: /(最终|结果是|成果是|带来了|提升到|降低到|获得了|完成了)/ },
+      { key: "result", pattern: /(最终|结果是|成果是|带来了|提升到|降低到|获得了|项目获|获奖|获得|完成了)/ },
       { key: "role", pattern: /(我负责|本人负责|我的职责是|我担任)/ },
-      { key: "action", pattern: /(我通过|我使用|我设计|我实现|我搭建|我完成|我把)/ },
+      { key: "action", pattern: /(^负责|我通过|我使用|我设计|我实现|我搭建|我完成|我把|将.+(?:抽象为|转化为)|围绕.+设计)/ },
       { key: "problem", pattern: /(要解决|为了|目标是|挑战是|问题是)/ },
       { key: "reflection", pattern: /(我学到|我意识到|这让我|下一步)/ },
     ];
     const match = inlineRules.find((item) => item.pattern.test(clause));
-    if (match && !facts[match.key]) facts[match.key] = trimFact(clause);
+    if (match && !facts[match.key]) {
+      const startPattern = match.key === "problem"
+        ? /(要解决|为了|目标是|挑战是|问题是|围绕)/
+        : match.key === "action"
+          ? /(^负责|我通过|我使用|我设计|我实现|我搭建|我完成|我把|将|围绕)/
+          : match.key === "result"
+            ? /(最终|结果是|成果是|带来了|提升到|降低到|获得了|项目获|获奖|获得|完成了)/
+            : null;
+      const start = startPattern ? clause.search(startPattern) : -1;
+      facts[match.key] = trimFact(start >= 0 ? clause.slice(start) : clause);
+    }
   }
 
   return facts;
@@ -154,6 +187,24 @@ export const parseNarrativeTimestamps = (comment: string): NarrativeTimestamp[] 
   return moments;
 };
 
+export const findResumeProjectExcerpt = (resume: string, subject: string, projectUrl = "") => {
+  if (!resume.trim()) return "";
+  const slug = projectUrl.replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").filter(Boolean).pop()?.replace(/\.git$/i, "") || "";
+  const aliases = [subject, slug]
+    .flatMap((value) => [value, ...value.split(/[^a-z0-9\u4e00-\u9fff]+/i)])
+    .map((value) => value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, ""))
+    .filter((value, index, values) => value.length >= 4 && values.indexOf(value) === index);
+  if (!aliases.length) return "";
+  const chunks = resume.split(/\r?\n|(?<=[。！？；])/).map((item) => item.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const index = chunks.findIndex((chunk) => {
+    const normalized = chunk.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
+    return aliases.some((alias) => normalized.includes(alias));
+  });
+  if (index < 0) return "";
+  const excerpt = chunks.slice(index, Math.min(chunks.length, index + 5)).join(" ");
+  return excerpt.length > 520 ? `${excerpt.slice(0, 519)}…` : excerpt;
+};
+
 const factualMetricFor = (subject: string, profile: UserProfile) => {
   const normalizedSubject = subject.toLowerCase();
   const metric = profile.metrics.find((item) => {
@@ -171,22 +222,26 @@ export function buildLocalMediaNarrative(asset: ProfileMediaAsset, profile: User
   const purpose = mediaPurposeLabels[asset.purpose];
   const comment = asset.comment.trim();
   const facts = parseNarrativeFacts(comment);
-  const problem = facts.problem || project?.desc || experience?.summary || "";
-  const role = facts.role || project?.role || experience?.role || "";
+  const resumeExcerpt = project ? findResumeProjectExcerpt(profile.resume, project.name, project.url) : "";
+  const resumeFacts = parseNarrativeFacts(resumeExcerpt);
+  const projectDescription = isNarrativePlaceholder(project?.desc) ? "" : project?.desc || "";
+  const problem = facts.problem || resumeFacts.problem || projectDescription || experience?.summary || "";
+  const role = facts.role || project?.role || experience?.role || resumeFacts.role || "";
   const action = facts.action
+    || resumeFacts.action
     || (project?.workflow.length ? project.workflow.join(" → ") : "")
     || project?.highlights[0]
     || experience?.highlights[0]
     || "";
   const matchedMetric = factualMetricFor(subject, profile);
-  const result = facts.result || project?.impact || matchedMetric || "";
+  const result = facts.result || resumeFacts.result || project?.impact || matchedMetric || "";
   const timestamp = comment.match(/\d{1,2}:\d{2}(?::\d{2})?/)?.[0] || "";
   const evidence = facts.evidence || (!Object.keys(facts).length ? comment : "") || (asset.kind === "project-video"
-    ? `已上传 ${asset.durationInSeconds ? `${asset.durationInSeconds.toFixed(1)} 秒` : "一段"}${purpose}；请补充希望观众重点关注的时间点和画面含义。`
+    ? `${purpose}呈现 ${subject} 的真实界面与连续操作过程。`
     : asset.kind === "project-document"
-      ? compact(asset.extractedText, "已上传文档素材；请补充其中哪一页、哪张图或哪项结论最能证明这段经历。", 96)
-      : "已上传真实图片素材；请补充画面中的对象、状态和它能证明的事实。");
-  const reflection = facts.reflection || profile.narrative || "";
+      ? compact(asset.extractedText, `${subject} 的文档页面构成项目证据。`, 96)
+      : `图片保留了 ${subject} 的真实界面或现场状态。`);
+  const reflection = facts.reflection || resumeFacts.reflection || "";
   const sharedKeywords = cleanKeywords(
     subject,
     project?.tech,
@@ -209,60 +264,58 @@ export function buildLocalMediaNarrative(asset: ProfileMediaAsset, profile: User
     keywords: cleanKeywords(keywords, sharedKeywords),
   });
 
-  return [
-    beat(
+  const beats: MediaNarrativeBeat[] = [beat(
       "hook",
-      compact(`${subject} · 真实作品开场`, "先让作品说话", 32),
+      compact(`${subject} · 先看真实作品`, "先让作品说话", 32),
       compact(
         result
-          ? `先用${purpose}呈现可核验结果：${result}`
+          ? `${purpose}先呈现结果：${result}`
           : problem
-            ? `围绕“${problem}”，这段${purpose}将展示 ${subject}。`
-            : `这段${purpose}用于介绍 ${subject}；问题背景与结果信息仍需补充。`,
+            ? `${purpose}将从问题背景进入 ${subject} 的真实实现与画面证据。`
+            : `下面用${purpose}介绍 ${subject}。`,
         "先看到真实作品，再理解过程。",
         92,
       ),
       "项目名与真实关键词分层进入，先建立命题，再把视线引向用户素材",
       [subject, result],
-    ),
-    beat(
+    )];
+  if (problem) beats.push(beat(
       "context",
       compact(`为什么要做 ${subject}`, "问题从哪里开始", 32),
-      compact(problem, "尚未提供明确的问题背景；请说明目标用户、真实痛点或要验证的假设。", 96),
+      compact(problem, "", 96),
       "左侧只使用已提供的问题、对象与约束生成关系图；右侧开始播放真实素材",
       [problem, subject],
-    ),
-    beat(
+    ));
+  if (role || action) beats.push(beat(
       "action",
-      compact(role ? `我负责：${role}` : "本人职责待补充", "我负责的关键动作", 32),
-      compact(action, "尚未提供具体行动；请写明你做了什么、使用了什么方法，以及为何这样选择。", 96),
+      compact(role ? `我负责：${role}` : "关键实现路径", "我负责的关键动作", 32),
+      compact([role && `职责：${role}`, action && `推进：${action}`].filter(Boolean).join("；"), "", 96),
       "左侧按用户填写的职责、方法和流程依次推进，不补写未发生的工作",
       [role, action],
-    ),
-    beat(
+    ));
+  beats.push(beat(
       "evidence",
       compact(timestamp ? `重点看 ${timestamp}` : `${purpose}中的证据`, "证据就在画面里", 32),
-      compact(evidence, "请补充这份素材能够证明什么。", 104),
+      compact(evidence, `${purpose}保留了项目的真实状态。`, 104),
       "右侧保留真实素材主体，左侧根据评论中的时间点与事实生成取景框和证据标签",
       [purpose, timestamp, facts.evidence],
-    ),
-    beat(
+    ));
+  if (result) beats.push(beat(
       "result",
-      compact(result ? `${subject} 的可核验结果` : "结果信息待补充", "结果如何被验证", 32),
-      compact(result, "尚未提供可核验结果；请补充数字、奖项、用户反馈、上线状态或明确产出。", 96),
+      compact(`${subject} 的可核验结果`, "结果如何被验证", 32),
+      compact(result, "", 96),
       "只有存在真实数字或明确成果时才生成大数字与对比；否则显示待补充状态",
       [result, project?.impact],
-    ),
-    beat(
+    ));
+  if (reflection) beats.push(beat(
       "reflection",
       compact(`从 ${subject} 沉淀的方法`, "这段经历留下什么", 32),
-      compact(reflection, "尚未提供复盘；请说明这次经历改变了你之后怎样判断、设计或协作。", 96),
+      compact(reflection, "", 96),
       "真实素材暂退，已提供的方法论关键词重新组合，并自然衔接下一段经历",
       [subject, reflection],
-    ),
-  ];
+    ));
+  return beats.filter((item) => !isNarrativePlaceholder(item.title) && !isNarrativePlaceholder(item.body));
 }
-
 export function normalizeNarrativeBeats(value: unknown): MediaNarrativeBeat[] {
   if (!Array.isArray(value)) return [];
   const phases: NarrativeBeatPhase[] = ["hook", "context", "action", "evidence", "result", "reflection"];

@@ -4,7 +4,7 @@
  */
 
 import { isGuestSession, loadSession } from "./session";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../lib/supabase";
 
 export const PROFILE_VERSION = 6 as const;
 export const STORAGE_KEY = "creator-city-profile";
@@ -144,7 +144,7 @@ const textList = (value: unknown) => Array.isArray(value) ? value.map(text).filt
 const recordList = (value: unknown) => Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object") : [];
 const makeId = (prefix: string, index = 0) => `${prefix}-${Date.now().toString(36)}-${index}-${Math.random().toString(36).slice(2, 6)}`;
 const narrativeVisuals: NarrativeMotionVisual[] = ["kinetic", "network", "workflow", "metric", "compare", "media-focus"];
-const narrativeLayouts: NarrativeBeatLayout[] = ["fullscreen", "split"];
+const narrativeLayouts: NarrativeBeatLayout[] = ["fullscreen", "split", "media-full"];
 
 const fallbackVisualForPhase = (phase: NarrativeBeatPhase): NarrativeMotionVisual => ({
   hook: "kinetic",

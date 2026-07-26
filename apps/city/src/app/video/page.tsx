@@ -7,8 +7,9 @@ import { Player, type PlayerRef } from "@remotion/player";
 import { ArrowDown, ArrowUp, CheckCircle2, Clapperboard, Download, FilePenLine, Layers3, LoaderCircle, Map, RotateCcw, Sparkles, Square } from "lucide-react";
 import { CreatorIntro, CreatorIntroSchema, type CreatorIntroProps } from "@/remotion/CreatorIntro";
 import { buildCreatorStoryboard, getStoryboardDuration, type CreatorStoryboard } from "@/remotion/storyboard";
-import { loadCloudProfile, loadProfile, type UserProfile } from "@/features/profile";
+import { loadCloudProfile, loadProfile, saveProfile, type UserProfile } from "@/features/profile";
 import { resolveProfileMedia } from "@/features/mediaLibrary";
+import { repairProfileMediaBindings } from "@/features/profileMediaBindings";
 import { LightRays } from "@/components/motion/LightRays";
 import { loadSession } from "@/features/session";
 
@@ -47,6 +48,7 @@ export default function VideoPage() {
   const [renderPhase, setRenderPhase] = useState<RenderPhase>("idle");
   const [renderProgress, setRenderProgress] = useState(0);
   const [renderDetail, setRenderDetail] = useState("实时预览无需编码，所以会立即出现；导出时才会逐帧生成文件。");
+  const [mediaIssue, setMediaIssue] = useState("");
   const abortRenderRef = useRef<AbortController | null>(null);
   const playerRef = useRef<PlayerRef>(null);
 
@@ -58,17 +60,33 @@ export default function VideoPage() {
       return;
     }
     void loadCloudProfile().then((cloudProfile) => {
-      const baseProfile = cloudProfile || loadProfile();
-      if (!baseProfile) {
+      const storedProfile = cloudProfile || loadProfile();
+      if (!storedProfile) {
         router.replace("/onboarding");
         return null;
       }
+      const baseProfile = repairProfileMediaBindings(storedProfile);
+      saveProfile(baseProfile);
       return resolveProfileMedia(baseProfile);
     }).then((resolved) => {
       if (!resolved) return;
       if (!active) { resolved.revoke(); return; }
       revoke = resolved.revoke;
       const nextStoryboard = buildCreatorStoryboard(resolved.profile);
+      const videos = resolved.profile.mediaAssets.filter((asset) => asset.kind === "project-video");
+      const missing = videos.filter((asset) => asset.runtimeStatus !== "ready" || !asset.runtimeUrl);
+      const unbound = videos.filter((asset) => !asset.projectId || !resolved.profile.projects.some((project) => project.id === asset.projectId));
+      const usedVideoIds = new Set(nextStoryboard.scenes.flatMap((scene) => scene.type === "project"
+        ? scene.mediaClips.filter((clip) => clip.mediaType === "video").map((clip) => clip.assetId)
+        : []));
+      const unused = videos.filter((asset) => asset.runtimeStatus === "ready" && !usedVideoIds.has(asset.id));
+      setMediaIssue(missing.length
+        ? `${missing.map((asset) => asset.name).join("、")} 的原文件未能从浏览器媒体库载入。`
+        : unbound.length
+          ? `${unbound.map((asset) => asset.name).join("、")} 尚未绑定到项目，请返回资料页选择对应项目。`
+          : unused.length
+            ? `${unused.map((asset) => asset.name).join("、")} 尚未进入当前分镜，请检查项目绑定。`
+            : "");
       setProfile(resolved.profile);
       setStoryboard(nextStoryboard);
       setSelectedId(nextStoryboard.scenes[0]?.id || "");
@@ -114,6 +132,11 @@ export default function VideoPage() {
 
   const renderMp4 = async () => {
     if (!props || !storyboard || !duration || renderPhase === "checking" || renderPhase === "rendering" || renderPhase === "encoding") return;
+    if (mediaIssue) {
+      setRenderPhase("error");
+      setRenderDetail(`已阻止生成无实机素材的成片：${mediaIssue}`);
+      return;
+    }
     setRenderPhase("checking");
     setRenderProgress(0);
     setRenderDetail("正在确认 Edge 的 WebCodecs、H.264 与 MP4 写入能力…");
@@ -212,6 +235,7 @@ export default function VideoPage() {
 
             <section className="mt-3 rounded-xl border border-white/10 bg-[#0b1210]/90 px-4 py-3 text-white" aria-live="polite">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">真实视频素材检查</strong><span className="text-xs text-[#9ee6d2]">{uploadedVideos.filter((asset) => asset.runtimeStatus === "ready" && asset.runtimeUrl).length} / {uploadedVideos.length} 已载入</span></div>
+              {mediaIssue && <p className="mt-2 rounded-lg border border-[#ff7468]/35 bg-[#ff7468]/10 px-3 py-2 text-xs leading-5 text-[#ffb8ae]">{mediaIssue} 系统不会再静默退回纯 Motion 成片。</p>}
               {uploadedVideos.length ? <div className="mt-2 grid gap-1.5">{uploadedVideos.map((asset) => <div className="flex flex-wrap items-center justify-between gap-2 text-xs" key={asset.id}><span className="min-w-0 truncate text-white/75">{asset.name}{asset.durationInSeconds ? ` · ${asset.durationInSeconds.toFixed(1)}s` : ""}</span><span className={asset.runtimeStatus === "ready" ? "text-[#78d7c2]" : "text-[#ff8b7f]"}>{asset.runtimeStatus === "ready" ? "可用于 Remotion 节选" : asset.runtimeError || "原文件未载入"}</span></div>)}</div> : <p className="mt-2 text-xs text-[#ffb8ae]">当前档案没有视频文件；请返回资料页上传并绑定到对应项目。</p>}
             </section>
 
@@ -219,7 +243,7 @@ export default function VideoPage() {
               <div className="render-console-copy"><span className="render-live-badge"><i /> LIVE PREVIEW</span><div><h2>{renderHeading}</h2><p>{renderDetail}</p></div></div>
               <div className="render-stage-strip">{["准备素材", "渲染帧", "编码 MP4", "完成"].map((label, index) => { const activeIndex = renderPhase === "checking" ? 0 : renderPhase === "rendering" ? 1 : renderPhase === "encoding" ? 2 : renderPhase === "done" ? 3 : -1; return <span className={index < activeIndex ? "done" : index === activeIndex ? "active" : ""} key={label}><i>{index < activeIndex || renderPhase === "done" ? "✓" : index + 1}</i>{label}</span>; })}</div>
               <div className="render-progress"><span style={{ width: `${renderProgress}%` }} /><b>{renderProgress}%</b></div>
-              <div className="render-console-actions">{rendering ? <button className="studio-button render-cancel" type="button" onClick={cancelRender}><Square size={14} />取消渲染</button> : <button className="studio-button render-export" type="button" onClick={() => void renderMp4()} disabled={!storyboard}><Download size={16} />{renderPhase === "done" ? "重新渲染 MP4" : "现场渲染 MP4"}</button>}<small>{rendering ? <><LoaderCircle className="render-spinner" size={14} />浏览器正在真实计算</> : "1280 × 720 · H.264 · 当前用户数据"}</small></div>
+              <div className="render-console-actions">{rendering ? <button className="studio-button render-cancel" type="button" onClick={cancelRender}><Square size={14} />取消渲染</button> : <button className="studio-button render-export" type="button" onClick={() => void renderMp4()} disabled={!storyboard || Boolean(mediaIssue)}><Download size={16} />{renderPhase === "done" ? "重新渲染 MP4" : "现场渲染 MP4"}</button>}<small>{rendering ? <><LoaderCircle className="render-spinner" size={14} />浏览器正在真实计算</> : mediaIssue ? "请先修复视频绑定" : "1280 × 720 · H.264 · 当前用户数据"}</small></div>
             </section>
 
             <div className="studio-timeline mt-5" aria-label="影片时间线">

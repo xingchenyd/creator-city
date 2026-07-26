@@ -24,6 +24,7 @@ import {
 } from "@/features/profile";
 import { deleteMediaFile, extractMediaFrames, formatMediaSize, getMediaBlob, inferMediaKind, mediaTypeForKind, storeMediaFile } from "@/features/mediaLibrary";
 import { buildLocalMediaNarrative, mediaPurposeLabels, narrativePhaseLabels, normalizeNarrativeBeats, shouldRegenerateNarrative } from "@/features/mediaNarrative";
+import { normalizedProjectKey, repairProfileMediaBindings } from "@/features/profileMediaBindings";
 import { loadSession } from "@/features/session";
 import { LightRays } from "@/components/motion/LightRays";
 
@@ -58,6 +59,40 @@ function githubName(value: string) {
   const clean = value.trim().replace(/^@/, "");
   const match = clean.match(/github\.com\/([^/?#]+)/i);
   return match?.[1] || clean;
+}
+
+type GithubProject = { name: string; desc: string; url: string; tech: string[] };
+
+const isPlaceholderText = (value: string | undefined) => !value?.trim() || /^(?:no description|待补充|暂无)/i.test(value.trim());
+
+function mergeGithubProjects(current: UserProfile, incoming: GithubProject[]) {
+  const usedIds = new Set<string>();
+  const imported = incoming.map((item, index) => {
+    const key = normalizedProjectKey(item);
+    const existing = current.projects.find((project) => !usedIds.has(project.id) && (
+      normalizedProjectKey(project) === key
+      || project.name.trim().toLowerCase() === item.name.trim().toLowerCase()
+    ));
+    if (!existing) {
+      return {
+        ...createEmptyProject(index),
+        name: item.name,
+        desc: isPlaceholderText(item.desc) ? "" : item.desc,
+        url: item.url,
+        tech: item.tech,
+        presentationMode: "browser" as const,
+      };
+    }
+    usedIds.add(existing.id);
+    return {
+      ...existing,
+      name: item.name || existing.name,
+      desc: isPlaceholderText(existing.desc) && !isPlaceholderText(item.desc) ? item.desc : existing.desc,
+      url: item.url || existing.url,
+      tech: [...new Set([...existing.tech, ...item.tech])],
+    };
+  });
+  return [...imported, ...current.projects.filter((project) => !usedIds.has(project.id))];
 }
 
 function Field({ label, value, onChange, placeholder, multiline = false }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; multiline?: boolean }) {
@@ -98,7 +133,7 @@ export default function OnboardingPage() {
       return;
     }
     void loadCloudProfile().then((existing) => {
-      const baseProfile = existing || loadProfile() || normalizeProfile({ ...createEmptyProfile(), name: session.displayName });
+      const baseProfile = repairProfileMediaBindings(existing || loadProfile() || normalizeProfile({ ...createEmptyProfile(), name: session.displayName }));
       const refreshedProfile = {
         ...baseProfile,
         mediaAssets: baseProfile.mediaAssets.map((asset) => shouldRegenerateNarrative(asset.narrativeBeats)
@@ -107,6 +142,7 @@ export default function OnboardingPage() {
       };
       profileRef.current = refreshedProfile;
       setProfile(refreshedProfile);
+      saveProfile(refreshedProfile);
       setHydrated(true);
     });
   }, [router]);
@@ -143,23 +179,34 @@ export default function OnboardingPage() {
       const response = await fetch(`/api/github/user?username=${encodeURIComponent(username)}`);
       const json = await response.json();
       if (!json.ok) throw new Error(json.error || "GitHub 暂时不可用");
-      const projects: CreatorProject[] = json.data.projects.map((item: { name: string; desc: string; url: string; tech: string[] }, index: number) => ({
-        ...createEmptyProject(index),
-        name: item.name,
-        desc: item.desc,
-        url: item.url,
-        tech: item.tech,
-        presentationMode: "browser",
-      }));
-      update({
-        name: json.data.name || profile.name,
-        bio: json.data.bio || profile.bio,
-        projects,
-        projectLinks: projects.map((item) => item.url || "").filter(Boolean),
-        skills: json.data.languages.map((name: string, index: number) => ({ name, level: Math.max(64, 86 - index * 4), evidence: "GitHub 公开项目" })),
+      const incoming = json.data.projects as GithubProject[];
+      setProfile((current) => {
+        const projects = mergeGithubProjects(current, incoming);
+        const beforeProjectIds = new Map(current.mediaAssets.map((asset) => [asset.id, asset.projectId]));
+        const merged = repairProfileMediaBindings({
+          ...current,
+          name: json.data.name || current.name,
+          bio: json.data.bio || current.bio,
+          projects,
+          projectLinks: [...new Set([...projects.map((item) => item.url || ""), ...current.projectLinks].filter(Boolean))],
+          skills: json.data.languages.map((name: string, index: number) => ({ name, level: Math.max(64, 86 - index * 4), evidence: "GitHub 公开项目" })),
+          updatedAt: new Date().toISOString(),
+        });
+        const repaired = {
+          ...merged,
+          mediaAssets: merged.mediaAssets.map((asset) => {
+            const rebound = beforeProjectIds.get(asset.id) !== asset.projectId;
+            return rebound || shouldRegenerateNarrative(asset.narrativeBeats)
+              ? { ...asset, analysisStatus: "draft" as const, narrativeBeats: buildLocalMediaNarrative(asset, merged) }
+              : asset;
+          }),
+        };
+        profileRef.current = repaired;
+        saveProfile(repaired);
+        return repaired;
       });
       setImportState("done");
-      setMessage(`已导入 ${projects.length} 个项目与 ${json.data.languages.length} 项技术`);
+      setMessage(`已合并 ${incoming.length} 个项目并保留原素材绑定，读取到 ${json.data.languages.length} 项技术`);
     } catch (error) {
       setImportState("error");
       setMessage(error instanceof Error ? `${error.message}，可继续手动填写` : "导入失败，可继续手动填写");
@@ -171,7 +218,7 @@ export default function OnboardingPage() {
     if (!value) return;
     update((current) => ({
       projectLinks: [...current.projectLinks, value],
-      projects: [...current.projects, { ...createEmptyProject(current.projects.length), name: value.split("/").filter(Boolean).pop() || "Project", desc: "待补充项目说明", url: value, tech: ["Project"], presentationMode: "browser" }],
+      projects: [...current.projects, { ...createEmptyProject(current.projects.length), name: value.split("/").filter(Boolean).pop() || "Project", desc: "", url: value, tech: [], presentationMode: "browser" }],
     }));
     setProjectInput("");
   };

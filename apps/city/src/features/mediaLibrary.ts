@@ -6,7 +6,8 @@ import type {
   UserProfile,
 } from "./profile";
 import { isGuestSession } from "./session";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../lib/supabase";
+import { repairProfileMediaBindings } from "./profileMediaBindings";
 
 const DB_NAME = "creator-city-media";
 const DB_VERSION = 1;
@@ -330,8 +331,9 @@ export async function extractMediaFrames(file: Blob, count = 4): Promise<string[
 }
 
 export async function resolveProfileMedia(profile: UserProfile): Promise<{ profile: UserProfile; revoke: () => void }> {
+  const repairedProfile = repairProfileMediaBindings(profile);
   const objectUrls: string[] = [];
-  const mediaAssets = await Promise.all(profile.mediaAssets.map(async (asset) => {
+  const mediaAssets = await Promise.all(repairedProfile.mediaAssets.map(async (asset) => {
     try {
       const blob = await getMediaBlob(asset.id);
       if (!blob) return { ...asset, runtimeStatus: "missing" as const, runtimeError: "浏览器本地媒体库中未找到原文件，请重新上传。" };
@@ -343,7 +345,7 @@ export async function resolveProfileMedia(profile: UserProfile): Promise<{ profi
     }
   }));
   const assetMap = new Map(mediaAssets.map((asset) => [asset.id, asset]));
-  const projects = profile.projects.map((project) => {
+  const projects = repairedProfile.projects.map((project) => {
     const assetIds = project.mediaAssetIds.length ? project.mediaAssetIds : project.mediaAssetId ? [project.mediaAssetId] : [];
     const resolvedAssets = assetIds.map((id) => assetMap.get(id)).filter((asset) => Boolean(asset?.runtimeUrl)) as ProfileMediaAsset[];
     const firstAsset = resolvedAssets.find((asset) => asset.kind === "project-video") || resolvedAssets[0];
@@ -356,7 +358,7 @@ export async function resolveProfileMedia(profile: UserProfile): Promise<{ profi
       mediaType: mediaTypeForKind(firstAsset.kind) || project.mediaType,
     };
   });
-  return { profile: { ...profile, projects, mediaAssets }, revoke: () => objectUrls.forEach((url) => URL.revokeObjectURL(url)) };
+  return { profile: { ...repairedProfile, projects, mediaAssets }, revoke: () => objectUrls.forEach((url) => URL.revokeObjectURL(url)) };
 }
 
 export function formatMediaSize(bytes: number) {
