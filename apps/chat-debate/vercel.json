@@ -1,0 +1,33 @@
+{
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{node_modules/**,public/**,src/**,dist/**,**/__pycache__/**,**/test_*.py}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/health",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/chat/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/chat-debate/assets/:path*",
+      "destination": "/assets/:path*"
+    },
+    {
+      "source": "/chat-debate",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/chat-debate/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}
