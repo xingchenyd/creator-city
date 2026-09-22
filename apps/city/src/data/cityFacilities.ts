@@ -87,9 +87,16 @@ export type CityHackathonEvent = {
   organizer: string;
   date: string;
   deadline: string;
+  deadlineAt?: string;
   location: string;
   mode: "ONLINE" | "HYBRID" | "IN PERSON";
-  status: "报名中" | "即将开放" | "活动入口";
+  status: "报名中" | "即将开放" | "活动入口" | "报名已截止" | "已结束" | "待核验";
+  region: "DOMESTIC" | "GLOBAL";
+  prize: string;
+  eligibility: string;
+  evidenceGrade: "A" | "B" | "PORTAL";
+  verifiedAt: string;
+  summary: string;
   tags: string[];
   registrationUrl: string;
   sourceUrl: string;
@@ -97,30 +104,80 @@ export type CityHackathonEvent = {
 
 export const competitions: CityHackathonEvent[] = [
   {
-    id: "mlh-global-hack-week-agents",
-    name: "Global Hack Week: Agents",
-    organizer: "Major League Hacking",
-    date: "2026.08.07 - 08.13",
-    deadline: "官方报名开放",
-    location: "全球线上",
-    mode: "ONLINE",
-    status: "报名中",
-    tags: ["AI AGENT", "GLOBAL", "BEGINNER FRIENDLY"],
-    registrationUrl: "https://events.mlh.io/events/14312-global-hack-week-agents",
-    sourceUrl: "https://www.mlh.com/seasons/2027/events",
+    id: "robbyant-2026", name: "首届蚂蚁灵波具身大模型挑战赛", organizer: "蚂蚁灵波 · 魔搭社区 · 阿里云天池",
+    date: "2026 · 线上初赛 + 线下真机黑客松", deadline: "2026.10.26（具体时区见官方页）",
+    deadlineAt: "2026-10-26T00:00:00+08:00", location: "中国大陆 · 线上初赛 / 线下决赛", mode: "HYBRID",
+    status: "报名中", region: "DOMESTIC", prize: "¥280,000", eligibility: "企业、高校、个人开发者及技术爱好者；详见官方规则",
+    evidenceGrade: "B", verifiedAt: "2026-09-22", summary: "基于 LingBot-VLA 2.0 的模型复现、训练调优和真机适配挑战，含线下黑客马拉松。",
+    tags: ["具身智能", "VLA", "中国大陆"], registrationUrl: "https://modelscope.cn/events", sourceUrl: "https://modelscope.cn/events",
   },
   {
-    id: "mlh-global-hack-week-data",
-    name: "Global Hack Week: Data",
-    organizer: "Major League Hacking",
-    date: "2026.09.11 - 09.17",
-    deadline: "官方报名开放",
+    id: "openatom-industry-2026", name: "第四届开放原子大赛 · 开源行业解决方案创新赛", organizer: "开放原子开源基金会 · 开源中国",
+    date: "2026 赛季", deadline: "报名窗口以赛事官网为准", location: "中国大陆 · 北京", mode: "HYBRID",
+    status: "待核验", region: "DOMESTIC", prize: "见官方奖项说明", eligibility: "企业、科研院所、高校实验室等；详见赛项要求",
+    evidenceGrade: "B", verifiedAt: "2026-09-22", summary: "围绕医疗、制造、教育、金融等行业，提交可落地的开源解决方案。已核验赛事存在，当前报名窗口待确认。",
+    tags: ["开源", "行业应用", "AI"], registrationUrl: "https://www.oschina.net/oa2026/", sourceUrl: "https://www.openatom.org/journalism/detail/F0onmmkGQvzG",
+  },
+  {
+    id: "weekly-cn", name: "周周黑客松 · 国内活动日历", organizer: "HackathonWeekly",
+    date: "滚动活动", deadline: "按各场活动报名窗口", location: "深圳 / 杭州 / 北京等", mode: "IN PERSON",
+    status: "活动入口", region: "DOMESTIC", prize: "按具体活动", eligibility: "创作者、独立开发者、产品人与技术爱好者",
+    evidenceGrade: "PORTAL", verifiedAt: "2026-09-22", summary: "国内社区的迷你黑客松、Demo Show 与工作坊；进入活动日历选择所在城市与最新场次。",
+    tags: ["黑客松", "独立开发", "国内社区"], registrationUrl: "https://hackathonweekly.com/events", sourceUrl: "https://hackathonweekly.com/",
+  },
+  {
+    id: "modelscope-cn", name: "魔搭社区 · 黑客松与 AI 开发赛", organizer: "ModelScope",
+    date: "持续更新", deadline: "按具体赛项", location: "中国大陆 / 线上", mode: "HYBRID",
+    status: "活动入口", region: "DOMESTIC", prize: "现金、算力及社区权益，按赛项", eligibility: "按具体赛事规则",
+    evidenceGrade: "PORTAL", verifiedAt: "2026-09-22", summary: "魔搭官方赛事目录，覆盖黑客松、应用开发、算法和模型实践活动。",
+    tags: ["AI", "魔搭", "黑客松"], registrationUrl: "https://modelscope.cn/events", sourceUrl: "https://modelscope.cn/events",
+  },
+  {
+    id: "fde-20260921", name: "FDE 实战松 · 前线交付战", organizer: "云谷中心 · 魔搭社区 · 蜂元智能",
+    date: "2026.09.21", deadline: "本场已结束", deadlineAt: "2026-09-18T00:00:00+08:00", location: "杭州 · 云谷中心", mode: "IN PERSON",
+    status: "已结束", region: "DOMESTIC", prize: "¥19,000", eligibility: "每队 1–3 人；保留活动复盘入口",
+    evidenceGrade: "A", verifiedAt: "2026-09-22", summary: "围绕具身智能数据工厂与园区 AI 提效开展单日开发，交付方案、报价与可运行 Demo。本场已结束。",
+    tags: ["FDE", "Agent", "杭州"], registrationUrl: "https://byteswarm-ai.com/fde/hack", sourceUrl: "https://byteswarm-ai.com/fde/hack",
+  },
+  {
+    id: "revenuecat-shipaton-2026",
+    name: "RevenueCat Shipaton 2026",
+    organizer: "RevenueCat · Devpost",
+    date: "2026.08.25 - 10.01",
+    deadline: "2026.10.01 14:45（北京时间）",
+    deadlineAt: "2026-10-01T14:45:00+08:00",
     location: "全球线上",
     mode: "ONLINE",
     status: "报名中",
-    tags: ["DATA", "AI", "GLOBAL"],
-    registrationUrl: "https://events.mlh.io/events/14416-global-hack-week-data",
-    sourceUrl: "https://www.mlh.com/seasons/2027/events",
+    region: "GLOBAL",
+    prize: "$685,000 现金及权益",
+    eligibility: "中国大陆可参赛；提交前核对官方规则",
+    evidenceGrade: "A",
+    verifiedAt: "2026-08-30",
+    summary: "围绕应用内购买与订阅体验构建并发布可体验产品。",
+    tags: ["APP", "PRODUCT", "GLOBAL"],
+    registrationUrl: "https://revenuecat-shipaton-2026.devpost.com/",
+    sourceUrl: "https://revenuecat-shipaton-2026.devpost.com/",
+  },
+  {
+    id: "opencv-ai-competition-2026",
+    name: "OpenCV AI Competition 2026",
+    organizer: "OpenCV · Devpost",
+    date: "2026.08.25 - 10.27",
+    deadline: "2026.10.27 14:45（北京时间）",
+    deadlineAt: "2026-10-27T14:45:00+08:00",
+    location: "全球线上",
+    mode: "ONLINE",
+    status: "报名中",
+    region: "GLOBAL",
+    prize: "$10,000 现金",
+    eligibility: "中国大陆可参赛；需遵守硬件与提交规则",
+    evidenceGrade: "B",
+    verifiedAt: "2026-08-30",
+    summary: "使用 OpenCV 与边缘 AI 方案解决真实视觉问题。",
+    tags: ["COMPUTER VISION", "EDGE AI", "OPEN SOURCE"],
+    registrationUrl: "https://opencv26.devpost.com/",
+    sourceUrl: "https://opencv26.devpost.com/",
   },
   {
     id: "devpost-ai-hackathons",
@@ -131,6 +188,12 @@ export const competitions: CityHackathonEvent[] = [
     location: "全球 / 线上与线下",
     mode: "HYBRID",
     status: "活动入口",
+    region: "GLOBAL",
+    prize: "按具体赛事",
+    eligibility: "按具体赛事官方规则",
+    evidenceGrade: "PORTAL",
+    verifiedAt: "2026-09-22",
+    summary: "Devpost 机器学习与 AI 赛事聚合入口，报名时进入具体主办方页面核验。",
     tags: ["MACHINE LEARNING", "OPEN SOURCE", "PRODUCT"],
     registrationUrl: "https://devpost.com/hackathons?themes[]=Machine%20Learning%2FAI",
     sourceUrl: "https://devpost.com/hackathons",
@@ -144,6 +207,12 @@ export const competitions: CityHackathonEvent[] = [
     location: "全球 / 线上与线下",
     mode: "HYBRID",
     status: "活动入口",
+    region: "GLOBAL",
+    prize: "按具体赛事",
+    eligibility: "按具体赛事官方规则",
+    evidenceGrade: "PORTAL",
+    verifiedAt: "2026-09-22",
+    summary: "面向开发者的赛事入口，覆盖 AI、开源与 Web3 主题。",
     tags: ["AI", "WEB3", "OPEN SOURCE"],
     registrationUrl: "https://www.hackquest.io/hackathons",
     sourceUrl: "https://www.hackquest.io/hackathons",

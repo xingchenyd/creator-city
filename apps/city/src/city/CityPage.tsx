@@ -29,13 +29,21 @@ export function CityPage() {
   const [selected, setSelected] = useState<CityInteractable | null>(null);
   const [activeFacility, setActiveFacility] = useState<SceneObjectDef | null>(null);
   const [name, setName] = useState("Creator");
+  const [debateHref, setDebateHref] = useState(CHAT_DEBATE_URL);
   const [debateAgentIds, setDebateAgentIds] = useState<string[]>([]);
   const interactionLocked = useRef(false);
 
   useEffect(() => {
     if (!loadSession()) { router.replace("/"); return; }
     setName(loadProfile()?.name || "Creator");
+    setDebateHref(chatDebateUrl());
     void loadCloudProfile().then((profile) => setName(profile?.name || loadProfile()?.name || "Creator"));
+    const requested = new URLSearchParams(window.location.search).get("facility") as SceneObjectId | null;
+    const requestedFacility = SCENE_OBJECTS.find((facility) => facility.id === requested);
+    if (requestedFacility) {
+      interactionLocked.current = true;
+      setActiveFacility(requestedFacility);
+    }
   }, [router]);
 
   const signOut = async () => { await clearSession(); router.push("/"); };
@@ -108,6 +116,7 @@ export function CityPage() {
   const closeFacility = () => {
     setActiveFacility(null);
     setSelected(null);
+    if (new URLSearchParams(window.location.search).has("facility")) window.history.replaceState({}, "", "/city/neon");
     window.setTimeout(() => { interactionLocked.current = false; }, 120);
   };
 
@@ -120,7 +129,7 @@ export function CityPage() {
       <CityGame onObjectSelect={selectObject} />
       <nav className="city-nav absolute right-3 top-3 z-20 sm:right-5 sm:top-5" aria-label="城市导航">
         <a href="/onboarding" title="个人简历生成"><FileText size={17} /><span>个人简历</span></a>
-        <a href={chatDebateUrl()} title="Agent 辩论"><MessageCircleMore size={17} /><span>Agent 辩论</span></a>
+        <a href={debateHref} title="创作议事厅"><MessageCircleMore size={17} /><span>创作议事厅</span></a>
         <a className="city-nav-profile" href="/profile" title="个人主页"><UserRound size={17} /><span>{name}</span></a>
         <button type="button" onClick={signOut} title="退出登录" aria-label="退出登录"><LogOut size={17} /><span>退出</span></button>
       </nav>
@@ -147,7 +156,7 @@ export function CityPage() {
             <div className="city-dialog-actions">
               {selectedPersonalAgent ? (
                 <>
-                  <button className="primary" type="button" onClick={openPersonalPage}><span>查看个人主页</span><ArrowRight size={18} /></button>
+                  <button className="primary" type="button" onClick={openPersonalPage}><span>{selectedPersonalAgent.id.includes("-") && !["lin-ran", "meng-yuxuan", "li-minghan"].includes(selectedPersonalAgent.id) ? "查看角色档案" : "查看个人主页"}</span><ArrowRight size={18} /></button>
                   <button type="button" onClick={toggleDebateAgent}>{debateAgentIds.includes(selectedPersonalAgent.debateAgentId!) ? "移出辩论" : "加入辩论"}</button>
                 </>
               ) : (

@@ -5,6 +5,13 @@ import liMinghanProfileJson from "../../shared/domain/li-minghan.json";
 import type { Agent, PersonalAgentProfile } from "@/types";
 
 const visualMap: Record<string, { accent: string; avatarPrefix?: string }> = {
+  "product-editor": { accent: "#b44d42" },
+  "evidence-researcher": { accent: "#477482" },
+  "experience-designer": { accent: "#8a5da0" },
+  "systems-builder": { accent: "#2f7564" },
+  "growth-strategist": { accent: "#b7812e" },
+  "ethics-steward": { accent: "#58666d" },
+  "demo-director": { accent: "#d36f3d" },
   trump: { accent: "#e7aa45", avatarPrefix: "PetTrump" },
   claude: { accent: "#8b7ccf", avatarPrefix: "PetClawd" },
   doubao: { accent: "#3fac83", avatarPrefix: "PetDoubaoHuman" },
@@ -36,7 +43,15 @@ const visualMap: Record<string, { accent: string; avatarPrefix?: string }> = {
   xiongda: { accent: "#68754f" },
 };
 
-const preferredIds = new Set(Object.keys(visualMap));
+const preferredIds = new Set([
+  "product-editor",
+  "evidence-researcher",
+  "experience-designer",
+  "systems-builder",
+  "growth-strategist",
+  "ethics-steward",
+  "demo-director",
+]);
 
 export const roundtableAgents: Agent[] = (expertPersonas as Array<Record<string, unknown>>)
   .filter((persona) => preferredIds.has(String(persona.id)))

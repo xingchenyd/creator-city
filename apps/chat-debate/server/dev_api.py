@@ -473,7 +473,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/api/health":
-            self._send(200, {"status": "ok", "service": "agent-chat"})
+            settings = Settings()
+            self._send(200, {
+                "status": "ok",
+                "service": "creator-council",
+                "ai_configured": settings.ai_configured,
+                "provider": settings.active_chat_provider,
+                "model": settings.active_chat_model,
+            })
             return
         self._send(404, {"error": {"message": "接口不存在。"}})
 

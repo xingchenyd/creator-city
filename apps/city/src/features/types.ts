@@ -116,6 +116,8 @@ export interface AgentInteraction {
 }
 
 export interface AgentMatchSignal {
+  targetAgentId: string;
+  targetOwnerName: string;
   matchScore: number;
   sharedInterests: string[];
   complementarySkills: string[];

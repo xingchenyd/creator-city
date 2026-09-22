@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS city-build
+FROM node:22-bookworm-slim AS city-build
 
 WORKDIR /build/city
 COPY apps/city/package.json apps/city/package-lock.json ./
@@ -13,7 +13,7 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_CHAT_DEBATE_URL=$NEXT_PUBLIC_CHAT_DEBATE_URL
 RUN npm run build
 
-FROM node:20-bookworm-slim AS chat-build
+FROM node:22-bookworm-slim AS chat-build
 
 WORKDIR /build/chat-debate
 COPY apps/chat-debate/package.json apps/chat-debate/package-lock.json ./
@@ -28,7 +28,7 @@ ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 ENV VITE_CREATOR_CITY_URL=$VITE_CREATOR_CITY_URL
 RUN npm run build
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 ENV PYTHONUNBUFFERED=1

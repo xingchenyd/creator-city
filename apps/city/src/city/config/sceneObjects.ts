@@ -5,7 +5,7 @@ export const SCENE_OBJECTS: SceneObjectDef[] = [
   // converted to the 1280×720 Phaser world. Each image stays on one stone pad;
   // the fourth lower round pad remains open for roaming and conversation NPCs.
   { kind: "facility", id: "bulletin", name: "AI Intelligence Academy", nameCn: "智能资讯书院", desc: "读取 GitHub、OpenAI 与开发者网站的 AI、Coding、Agent 最新信号。", route: "/intelligence", x: 176, y: 119, w: 174, h: 142, color: 0xfff9df, accent: 0xd94b3f, shape: "bulletin" },
-  { kind: "facility", id: "leaderboard", name: "Model Observatory", nameCn: "模型天文台", desc: "综合能力、价格、速度和上下文的模型对比与排行。", route: "/leaderboard", x: 363, y: 119, w: 174, h: 142, color: 0x163531, accent: 0xffd64f, shape: "screen" },
+  { kind: "facility", id: "leaderboard", name: "Model Observatory", nameCn: "模型天文台", desc: "实时查看最新上架模型、价格、上下文与接口支持能力。", route: "/leaderboard", x: 363, y: 119, w: 174, h: 142, color: 0x163531, accent: 0xffd64f, shape: "screen" },
   { kind: "facility", id: "table-dev", name: "Build & Test Workshop", nameCn: "开发测试工坊", desc: "发布开发与测试需求，可设置积分或红包奖励。", route: "/collaboration?zone=dev", x: 557, y: 119, w: 166, h: 142, color: 0x4b86d1, accent: 0x42c8c4, shape: "table" },
   { kind: "facility", id: "homepage", name: "Personal Homepage", nameCn: "个人主页", desc: "展示当前用户的静态简历、经历与项目档案。", route: "/profile", x: 819, y: 80, w: 278, h: 216, color: 0xd94b3f, accent: 0xffd64f, shape: "studio" },
   { kind: "facility", id: "skillgarden", name: "Skill & Open Source Market", nameCn: "Skill 与开源集市", desc: "浏览新 Skill、工作流、开源项目与安装方式。", route: "/skills", x: 111, y: 390, w: 160, h: 157, color: 0x4d9b63, accent: 0xffd64f, shape: "garden" },

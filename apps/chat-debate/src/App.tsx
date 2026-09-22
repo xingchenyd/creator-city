@@ -5,6 +5,8 @@ import {
   Bot,
   Check,
   CircleAlert,
+  Clipboard,
+  Download,
   Home,
   Info,
   LoaderCircle,
@@ -49,7 +51,7 @@ export function App() {
   );
   const allAgents = useMemo(() => [...personalAgents, ...roundtableAgents], [personalAgents]);
   const [selectedIds, setSelectedIds] = useState<string[]>([
-    "claude", "doubao", "zhangyiming", "lin-ran", "meng-yuxuan", "li-minghan",
+    "product-editor", "evidence-researcher", "experience-designer", "systems-builder",
   ]);
   const [topicDraft, setTopicDraft] = useState("");
   const [activeTopic, setActiveTopic] = useState("");
@@ -57,6 +59,11 @@ export function App() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [profileAgentId, setProfileAgentId] = useState("");
   const [mobileMembersOpen, setMobileMembersOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(() => window.localStorage.getItem("creator-council:reduced-motion") === "1");
+  const [comfortableText, setComfortableText] = useState(() => window.localStorage.getItem("creator-council:comfortable-text") !== "0");
+  const [serviceStatus, setServiceStatus] = useState<{ configured: boolean; model: string } | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [runtime, setRuntime] = useState<Record<string, AgentRuntimeState>>({});
   const [schedule, setSchedule] = useState<ScheduledTurn[]>([]);
@@ -98,6 +105,17 @@ export function App() {
       });
     });
   }, []);
+
+  useEffect(() => {
+    fetch("/api/health").then((response) => response.json()).then((health) => {
+      setServiceStatus({ configured: Boolean(health.ai_configured), model: String(health.model || "") });
+    }).catch(() => setServiceStatus(null));
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("creator-council:reduced-motion", reducedMotion ? "1" : "0");
+    window.localStorage.setItem("creator-council:comfortable-text", comfortableText ? "1" : "0");
+  }, [comfortableText, reducedMotion]);
 
   useEffect(() => {
     if (urlHydratedRef.current) return;
@@ -154,9 +172,9 @@ export function App() {
     const systemMessage: ChatMessage = {
       id: crypto.randomUUID(),
       speakerId: "moderator",
-      speakerName: "群助手",
+      speakerName: "议事记录员",
       role: "system",
-      text: `群聊已创建 · 议题：${topic}`,
+      text: `创作议事厅已开启 · 议题：${topic}`,
       createdAt: new Date().toISOString(),
     };
     sessionIdRef.current += 1;
@@ -380,25 +398,47 @@ export function App() {
     setVerdictLoading(false);
   };
 
+  const discussionMarkdown = () => {
+    const transcript = messages.filter((message) => message.role !== "system").map((message) => `### ${message.speakerName}\n\n${displayMessageText(message.text)}`).join("\n\n");
+    const conclusion = verdict ? `\n\n## 议事结论\n\n${verdict.conclusion}\n\n### 共识\n${verdict.consensus.map((item) => `- ${item}`).join("\n")}\n\n### 分歧\n${verdict.disagreements.map((item) => `- ${item}`).join("\n")}` : "";
+    return `# 创作议事厅纪要\n\n**议题：** ${activeTopic || topicDraft || "未命名议题"}\n\n${transcript}${conclusion}\n`;
+  };
+
+  const downloadMinutes = () => {
+    const blob = new Blob([discussionMarkdown()], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `creator-council-${new Date().toISOString().slice(0, 10)}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setMoreOpen(false);
+  };
+
+  const copyConclusion = async () => {
+    await navigator.clipboard.writeText(verdict?.conclusion || discussionMarkdown());
+    setMoreOpen(false);
+  };
+
   return (
-    <div className="app-viewport">
+    <div className={`app-viewport ${reducedMotion ? "reduce-motion" : ""} ${comfortableText ? "comfortable-text" : "compact-text"}`}>
       <div className="app-shell">
         <aside className="rail">
-          <img src={`${import.meta.env.BASE_URL}assets/brand/app-icon.png`} className="brand-mark" alt="Agent 群聊" />
-          <button className="rail-button is-active" title="群聊"><MessageCircleMore size={21} /></button>
+          <img src={`${import.meta.env.BASE_URL}assets/brand/app-icon.png`} className="brand-mark" alt="创作议事厅" />
+          <span className="rail-button is-active" title="创作议事厅" aria-current="page"><MessageCircleMore size={21} /></span>
           <button className="rail-button" title="创建个人 Agent" onClick={() => setWizardOpen(true)}><UserRoundPlus size={21} /></button>
           <span className="rail-spacer" />
           <a className="rail-button" title="返回 Creator City" href={CREATOR_CITY_URL}><Home size={20} /></a>
-          <button className="rail-button" title="设置"><Settings2 size={20} /></button>
+          <button className="rail-button" title="设置" onClick={() => setSettingsOpen(true)}><Settings2 size={20} /></button>
         </aside>
 
         <aside className="conversation-sidebar">
           <div className="sidebar-title"><span>消息</span><button className="icon-button dark" title="新群聊" onClick={resetChat}><Plus size={18} /></button></div>
-          <button className="conversation-item is-active">
+          <div className="conversation-item is-active" aria-current="page">
             <div className="conversation-avatar"><Users size={20} /></div>
-            <div><strong>Agent 群聊</strong><span>{view === "chat" ? activeTopic : "新讨论"}</span></div>
+            <div><strong>创作议事厅</strong><span>{view === "chat" ? activeTopic : "新议题"}</span></div>
             <time>{view === "chat" ? "刚刚" : ""}</time>
-          </button>
+          </div>
           <div className="sidebar-section-title">个人 Agent</div>
           {personalAgents.map((agent) => (
             <div className="mini-agent" key={agent.id}>
@@ -414,8 +454,8 @@ export function App() {
           <header className="chat-header">
             <button className="mobile-only icon-button" title="返回" onClick={resetChat}><ArrowLeft size={20} /></button>
             <div className="chat-heading">
-              <h1>Agent 群聊 <span>({selectedAgents.length})</span></h1>
-              <p>{view === "chat" ? "群聊讨论中" : "选择成员与议题"}</p>
+              <h1>创作议事厅 <span>({selectedAgents.length})</span></h1>
+              <p>{view === "chat" ? "多角色讨论进行中" : "选择议事成员与创作命题"}</p>
             </div>
             <div className="header-actions">
               <a className="icon-button city-return-button" title="返回 Creator City" href={CREATOR_CITY_URL}><Home size={18} /></a>
@@ -431,7 +471,8 @@ export function App() {
                 </button>
               )}
               {view === "chat" && <button className="icon-button" title="重新开始" onClick={resetChat}><RotateCcw size={18} /></button>}
-              <button className="icon-button" title="更多"><MoreHorizontal size={20} /></button>
+              <button className="icon-button" title="更多" onClick={() => setMoreOpen((value) => !value)}><MoreHorizontal size={20} /></button>
+              {moreOpen && <div className="header-menu"><button type="button" disabled={view !== "chat"} onClick={downloadMinutes}><Download size={15} />导出 Markdown 纪要</button><button type="button" disabled={view !== "chat"} onClick={() => void copyConclusion()}><Clipboard size={15} />复制讨论结论</button></div>}
             </div>
           </header>
 
@@ -482,15 +523,16 @@ export function App() {
           )}
         </main>
 
-        <MemberPanel agents={selectedAgents} model={model} topic={view === "chat" ? activeTopic : topicDraft} />
+        <MemberPanel agents={selectedAgents} model={model} topic={view === "chat" ? activeTopic : topicDraft} serviceStatus={serviceStatus} />
       </div>
 
       {wizardOpen && <ProfileWizard onClose={() => setWizardOpen(false)} onSave={saveProfile} />}
+      {settingsOpen && <div className="sheet-backdrop council-settings-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}><section className="council-settings" aria-label="议事厅设置"><header><div><small>CREATOR COUNCIL</small><h2>阅读与服务设置</h2></div><button className="icon-button" onClick={() => setSettingsOpen(false)}><X size={19} /></button></header><div><label><span><strong>舒适字号</strong><small>提高界面辅助文字与标签的可读性</small></span><input type="checkbox" checked={comfortableText} onChange={(event) => setComfortableText(event.target.checked)} /></label><label><span><strong>减少动态效果</strong><small>关闭气泡、弹层与状态动画</small></span><input type="checkbox" checked={reducedMotion} onChange={(event) => setReducedMotion(event.target.checked)} /></label><article className={serviceStatus?.configured ? "ready" : "warning"}><Bot size={18} /><div><strong>AI 对话服务</strong><p>{serviceStatus === null ? "无法读取服务状态" : serviceStatus.configured ? `${serviceStatus.model} 已配置` : "未配置模型密钥；发起讨论时会明确报错，不会伪造回复"}</p></div></article></div></section></div>}
       {profileAgent && <AgentProfileSheet agent={profileAgent} selected={selectedIds.includes(profileAgent.id)} onClose={() => setProfileAgentId("")} onSelect={() => setSelectedIds((current) => current.includes(profileAgent.id) ? current : current.length < 6 ? [...current, profileAgent.id] : current)} />}
       {mobileMembersOpen && (
         <div className="mobile-members-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setMobileMembersOpen(false)}>
           <div className="mobile-members-sheet">
-            <header><strong>群成员 ({selectedAgents.length})</strong><button className="icon-button" onClick={() => setMobileMembersOpen(false)}><X size={18} /></button></header>
+            <header><strong>议事成员 ({selectedAgents.length})</strong><button className="icon-button" onClick={() => setMobileMembersOpen(false)}><X size={18} /></button></header>
             <MemberList agents={selectedAgents} />
           </div>
         </div>
@@ -548,25 +590,33 @@ function SetupPanel({
   onCreate: () => void;
   onStart: () => void;
 }) {
+  const topicPresets = [
+    "黑客松项目应该优先追求技术深度，还是可演示的完整闭环？",
+    "Creator City 下一轮最该优先建设赛事、协作还是个人主页能力？",
+    "AI 创作工具应该默认公开过程，还是只交付最终结果？",
+    "一个开源创作者社区如何兼顾增长、作品质量与成员隐私？",
+  ];
   return (
     <div className="setup-scroll">
+      <section className="council-intro"><div><small>CREATOR CITY · COUNCIL ROOM</small><h2>让不同专业视角，替你的创作决策找出盲区</h2><p>选择 2–6 位角色。系统会依次完成立场陈述、交叉质询、观点收敛和结构化纪要。</p></div><ol><li><b>01</b>定义具体命题</li><li><b>02</b>多角色质询</li><li><b>03</b>沉淀行动结论</li></ol></section>
       <section className="setup-section">
-        <div className="section-heading"><div><span>群成员</span><small>已选 {selectedIds.length} 位 · 可选 2–6 位</small></div><button onClick={onCreate}><UserRoundPlus size={16} />创建</button></div>
+        <div className="section-heading"><div><span>我的 Agent</span><small>已选 {selectedIds.length} 位 · 可选 2–6 位</small></div><button onClick={onCreate}><UserRoundPlus size={16} />创建</button></div>
         <div className="agent-selector-grid">
           {personalAgents.map((agent) => <AgentChoice key={agent.id} agent={agent} selected={selectedIds.includes(agent.id)} onClick={() => onToggle(agent.id)} />)}
           <button className="agent-choice create-choice" onClick={onCreate}><span><Plus size={21} /></span><strong>新的我</strong><small>填写问卷</small></button>
         </div>
       </section>
       <section className="setup-section">
-        <div className="section-heading"><div><span>内置 Agent</span><small>可直接加入群聊</small></div></div>
+        <div className="section-heading"><div><span>创作顾问席</span><small>虚构角色 · 覆盖产品、证据、体验、工程、增长、伦理与演示</small></div></div>
         <div className="agent-selector-grid">
           {publicAgents.map((agent) => <AgentChoice key={agent.id} agent={agent} selected={selectedIds.includes(agent.id)} onClick={() => onToggle(agent.id)} />)}
         </div>
       </section>
       <section className="setup-section topic-compose">
-        <div className="section-heading"><div><span>讨论议题</span><small>本次群聊</small></div></div>
-        <textarea value={topic} onChange={(event) => onTopicChange(event.target.value)} placeholder="输入一个具体问题，例如：为了高薪长期加班，值得吗？" />
-        <div className="start-row"><span>本次成员 · {selectedIds.length} 位</span><button className="primary-button" disabled={selectedIds.length < 2 || selectedIds.length > 6 || !topic.trim()} onClick={onStart}><Sparkles size={17} />创建群聊</button></div>
+        <div className="section-heading"><div><span>讨论议题</span><small>越具体，结论越可行动</small></div></div>
+        <div className="topic-presets">{topicPresets.map((preset) => <button type="button" className={topic === preset ? "active" : ""} onClick={() => onTopicChange(preset)} key={preset}>{preset}</button>)}</div>
+        <textarea value={topic} onChange={(event) => onTopicChange(event.target.value)} placeholder="输入一个需要做出取舍的创作问题，例如：首个版本应该先证明用户价值，还是先展示技术上限？" />
+        <div className="start-row"><span>本次议事成员 · {selectedIds.length} 位</span><button className="primary-button" disabled={selectedIds.length < 2 || selectedIds.length > 6 || !topic.trim()} onClick={onStart}><Sparkles size={17} />开始议事</button></div>
       </section>
     </div>
   );
@@ -669,14 +719,14 @@ function DiscussionVerdictCard({ verdict }: { verdict: DiscussionVerdict }) {
   );
 }
 
-function MemberPanel({ agents, model, topic }: { agents: Agent[]; model: string; topic: string }) {
+function MemberPanel({ agents, model, topic, serviceStatus }: { agents: Agent[]; model: string; topic: string; serviceStatus: { configured: boolean; model: string } | null }) {
   return (
     <aside className="member-panel">
-      <div className="member-panel-heading"><strong>群聊信息</strong><Info size={17} /></div>
+      <div className="member-panel-heading"><strong>议事信息</strong><Info size={17} /></div>
       <div className="member-topic"><span>讨论议题</span><p>{topic || "尚未填写"}</p></div>
-      <div className="member-panel-label">群成员 · {agents.length}</div>
+      <div className="member-panel-label">议事成员 · {agents.length}</div>
       <MemberList agents={agents} />
-      <div className="core-status"><Bot size={16} /><div><strong>对话服务</strong><span>{model ? `${model} · 已连接` : "等待讨论"}</span></div><i className={model ? "online" : ""} /></div>
+      <div className="core-status"><Bot size={16} /><div><strong>对话服务</strong><span>{model ? `${model} · 已连接` : serviceStatus?.configured ? `${serviceStatus.model} · 就绪` : serviceStatus ? "未配置模型密钥" : "状态检查中"}</span></div><i className={model || serviceStatus?.configured ? "online" : serviceStatus ? "warning" : ""} /></div>
     </aside>
   );
 }
@@ -699,7 +749,7 @@ function profileStorage(): Storage {
 }
 
 function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : "群聊生成失败，请重试。";
+  return reason instanceof Error ? reason.message : "议事内容生成失败，请重试。";
 }
 
 function displayMessageText(text: string): string {

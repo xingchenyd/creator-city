@@ -17,7 +17,7 @@ const chapters = [
 
 export default function HomePage() {
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,11 +27,17 @@ export default function HomePage() {
   useEffect(() => {
     router.prefetch("/city/neon");
     let active = true;
-    void hydrateSession().then((session) => {
-      if (!active) return;
-      if (session) router.replace("/city/neon");
-      else setReady(true);
-    });
+    void hydrateSession()
+      .then((session) => {
+        if (!active) return;
+        setReady(true);
+        if (session) router.replace("/city/neon");
+      })
+      .catch(() => {
+        if (!active) return;
+        setReady(true);
+        setError("登录状态读取失败，仍可使用游客模式进入。");
+      });
     return () => { active = false; };
   }, [router]);
 
@@ -79,7 +85,16 @@ export default function HomePage() {
 
   const finishEntrance = useCallback(() => router.push("/city/neon"), [router]);
 
-  if (!ready) return <main className="min-h-screen bg-[#08100e]" />;
+  if (!ready) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#08100e] text-[#f0d28d]">
+        <div className="text-center">
+          <p className="font-mono text-xs tracking-[0.28em]">CREATOR CITY</p>
+          <p className="mt-3 text-sm text-white/65">正在读取创作者身份…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="login-cinematic">

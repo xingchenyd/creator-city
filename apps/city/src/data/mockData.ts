@@ -1,5 +1,5 @@
 /**
- * Mock data for all modules - visual polish later
+ * Curated local data used when a live provider is unavailable.
  */
 
 export const aiPulse = {
@@ -77,13 +77,25 @@ export const creatorProfile = {
   stats: { projects: 12, stars: 4190, contributions: 856, followers: 320 },
 };
 
-export const projectsMuseum = [
-  { id: "1", title: "AutoDev", author: "Sam Liu", category: "AI Coding", tech: ["Python", "Claude"], desc: "Autonomous dev agent that handles full-stack tasks", cover: "#4a8a4a", github: "github.com/sam/autodev", demo: "autodev.ai" },
-  { id: "2", title: "VisualRAG", author: "Yuki Zhang", category: "Agent", tech: ["TypeScript", "GPT-5"], desc: "Visual knowledge base with RAG-powered search", cover: "#6a9bd4", github: "github.com/yuki/visualrag" },
-  { id: "3", title: "PromptCanvas", author: "Wang Lei", category: "AI Design", tech: ["React", "DALL-E"], desc: "Collaborative AI design tool for teams", cover: "#d4844a", github: "github.com/wang/promptcanvas", demo: "promptcanvas.app" },
-  { id: "4", title: "EduMentor", author: "Li Hua", category: "Education", tech: ["Python", "RAG"], desc: "Personalized AI tutor with learning path generation", cover: "#a0522d", github: "github.com/lihu/edumentor" },
-  { id: "5", title: "AgentSim", author: "Chen Wei", category: "Research", tech: ["Python", "LangGraph"], desc: "Multi-agent simulation framework for research", cover: "#8b6914", github: "github.com/chen/agentsim" },
-  { id: "6", title: "FlowState", author: "Zhao Min", category: "Productivity", tech: ["TypeScript", "AI"], desc: "AI-powered workflow automation for creators", cover: "#4a6a4a", github: "github.com/zhao/flowstate", demo: "flowstate.io" },
+type MuseumProject = {
+  id: string;
+  title: string;
+  author: string;
+  category: string;
+  tech: string[];
+  desc: string;
+  cover: string;
+  github: string;
+  demo?: string;
+};
+
+export const projectsMuseum: MuseumProject[] = [
+  { id: "creator-city", title: "Creator City", author: "xingchenyd", category: "AI Design", tech: ["Next.js", "Remotion", "Supabase"], desc: "把创作者档案、作品证据、协作与多 Agent 议事组织进一座可探索的北京像素社区。", cover: "#236b5b", github: "github.com/xingchenyd/creator-city" },
+  { id: "colorbook", title: "ColorBook · 此地有回声", author: "xingchenyd", category: "Education", tech: ["城市叙事", "AI", "Web"], desc: "将北京与天津的地点、故事卡牌和现实任务编排成可参与的城市文化体验。", cover: "#d94b3f", github: "github.com/xingchenyd/colorbook" },
+  { id: "scrap-loop", title: "Scrap Loop · 废品轮回", author: "xingchenyd", category: "Education", tech: ["Pixel RPG", "Game Design", "Web"], desc: "用像素探索、物品分类和循环机制，把环保回收知识做成可玩的网页原型。", cover: "#d9b451", github: "github.com/xingchenyd/scrap-loop" },
+  { id: "mooncut", title: "MoonCut", author: "qybaihe", category: "Productivity", tech: ["Remotion", "FFmpeg", "Electron"], desc: "面向 AI 口播内容的跨端视频工作台，覆盖素材、编排与渲染流程。", cover: "#7256a8", github: "github.com/qybaihe/mooncut" },
+  { id: "roundtable", title: "Roundtable", author: "qybaihe", category: "Agent", tech: ["React", "FastAPI", "Multi-Agent"], desc: "多角色立场、质询与收敛式讨论引擎，是创作议事厅的核心参考实现。", cover: "#477482", github: "github.com/qybaihe/Roundtable" },
+  { id: "yd-academic-ppt", title: "Academic PPT Skill", author: "xingchenyd", category: "Research", tech: ["Codex Skill", "Presentation", "Workflow"], desc: "把研究材料和结构要求转化为可复用的学术演示工作流。", cover: "#c36c3d", github: "github.com/xingchenyd/yd-academic-ppt" },
 ];
 
 export const mentorRecommendations = [
